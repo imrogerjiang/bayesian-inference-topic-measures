@@ -2,7 +2,7 @@ import pandas as pd
 from matplotlib import pyplot as plt
 import arviz as az
 
-def mcmc_diagnostics(trace, summary_stat):
+def mcmc_diagnostics2(trace, summary_stat):
     # Selecting parameters with highest rhat and lowest ess
     highest_rhat = summary_stat.sort_values(by="r_hat", ascending=False).head(1)
     lowest_ess = summary_stat.sort_values(by="ess_bulk", ascending=True).head(1)
@@ -19,7 +19,7 @@ def mcmc_diagnostics(trace, summary_stat):
 
     print("========================== trace diagnostics ==========================")
     print("Divergent transitions")
-    print(pd.DataFrame(glm["trace"].sample_stats["diverging"]).T.sum(axis="rows"))
+    print(pd.DataFrame(trace.sample_stats["diverging"]).T.sum(axis="rows"))
     print("\n")
     print("Variable with highest rhat")
     print(highest_rhat)
@@ -37,36 +37,36 @@ def mcmc_diagnostics(trace, summary_stat):
 
     # Trace of worst rhat
     if highest_rhat[1] is None: 
-        ax3 = az.plot_trace(glm["trace"].posterior[highest_rhat[0]], kind="trace")
+        ax3 = az.plot_trace(trace.posterior[highest_rhat[0]], kind="trace")
     else:
-        ax3 = az.plot_trace(glm["trace"].posterior[highest_rhat[0]].sel(**{highest_rhat[0]+"_dim_0":highest_rhat[1]}), kind="trace")
+        ax3 = az.plot_trace(trace.posterior[highest_rhat[0]].sel(**{highest_rhat[0]+"_dim_0":highest_rhat[1]}), kind="trace")
     ax3[0][0].set_title(f"Posterior worst rhat: {highest_rhat}")
     ax3[0][1].set_title("trace")
 
     # Traceof worst ess
 
     if lowest_ess[1] is None: 
-        ax4 = az.plot_trace(glm["trace"].posterior[lowest_ess[0]], kind="trace")
+        ax4 = az.plot_trace(trace.posterior[lowest_ess[0]], kind="trace")
     else:
-        ax4 = az.plot_trace(glm["trace"].posterior[lowest_ess[0]].sel(**{lowest_ess[0]+"_dim_0":lowest_ess[1]}), kind="trace")
+        ax4 = az.plot_trace(trace.posterior[lowest_ess[0]].sel(**{lowest_ess[0]+"_dim_0":lowest_ess[1]}), kind="trace")
     ax4[0][0].set_title(f"Posterior worst ess: {lowest_ess}")
     ax4[0][1].set_title("trace")
 
     # Trank of worst rhat
     if highest_rhat[1] is None: 
-        ax5 = az.plot_rank(glm["trace"].posterior[highest_rhat[0]],kind="vlines",
+        ax5 = az.plot_rank(trace.posterior[highest_rhat[0]],kind="vlines",
                  vlines_kwargs={'lw':0}, marker_vlines_kwargs={'lw':3})
     else:
-        ax5 = az.plot_rank(glm["trace"].posterior[highest_rhat[0]].sel(**{highest_rhat[0]+"_dim_0":highest_rhat[1]}),kind="vlines",
+        ax5 = az.plot_rank(trace.posterior[highest_rhat[0]].sel(**{highest_rhat[0]+"_dim_0":highest_rhat[1]}),kind="vlines",
                  vlines_kwargs={'lw':0}, marker_vlines_kwargs={'lw':3})
     ax5.set_title(f"Trank worst rhat: {highest_rhat}")
 
     # Trank of worst ESS
     if lowest_ess[1] is None: 
-        ax6 = az.plot_rank(glm["trace"].posterior[lowest_ess[0]],kind="vlines",
+        ax6 = az.plot_rank(trace.posterior[lowest_ess[0]],kind="vlines",
                  vlines_kwargs={'lw':0}, marker_vlines_kwargs={'lw':3})
     else:
-        ax6 = az.plot_rank(glm["trace"].posterior[lowest_ess[0]].sel(**{lowest_ess[0]+"_dim_0":lowest_ess[1]}),kind="vlines",
+        ax6 = az.plot_rank(trace.posterior[lowest_ess[0]].sel(**{lowest_ess[0]+"_dim_0":lowest_ess[1]}),kind="vlines",
                  vlines_kwargs={'lw':0}, marker_vlines_kwargs={'lw':3})
     ax6.set_title(f"Trank worst ess: {lowest_ess}")
 
