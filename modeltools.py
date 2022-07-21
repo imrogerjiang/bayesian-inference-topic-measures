@@ -1,8 +1,9 @@
 import pandas as pd
+from downcast import downcast_df
 from matplotlib import pyplot as plt
 import arviz as az
 
-def plot_sample_sim(prior_pred, postrr_pred, data, target="s"):
+def plot_prior_postrr(prior_pred, postrr_pred, data, target="s"):
     # Prior
     # Plotting distribution of scores simulated from prior
     prior_samples = prior_pred.prior_predictive.sel(chain=0)
