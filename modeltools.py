@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 from downcast import downcast_df
 from matplotlib import pyplot as plt
 import arviz as az
