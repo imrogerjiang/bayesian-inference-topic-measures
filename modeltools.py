@@ -47,7 +47,7 @@ def plot_prior_postrr(prior_pred, postrr_pred, data, target="s"):
     plt.plot()
 
 def create_summary_stat(trace, **args):
-    summary_stat = az.summary(trace, round_to=4, args).reset_index()
+    summary_stat = az.summary(trace, round_to=4, **args).reset_index()
 
     # Creating parameter and parameter number columns
     summary_stat["param"] = summary_stat["index"].str.split("[").str[0]
