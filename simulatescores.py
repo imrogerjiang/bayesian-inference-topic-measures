@@ -14,7 +14,7 @@ from time import time
 # from modeltools import plot_prior_postrr, create_summary_stat, mcmc_diagnostics 
 from downcast import downcast_df
 
-def simulate_scores(model, p_diff=0.08, n_raters=40, topics_per_r=40, n_sims=1_000):
+def simulate_scores(model, p_diff=0.08, n_raters=40, scores_per_r=40, n_sims=1_000):
     
     def resample(all_ids, param, size, bound=0.1):
         # resampling raters and topics such that effects sum to 0.
@@ -102,7 +102,7 @@ def simulate_scores(model, p_diff=0.08, n_raters=40, topics_per_r=40, n_sims=1_0
             p = p/p.sum()
 
         #     Sample according to probability
-            rated_topics = np.random.choice(range(100), size=topics_per_r, replace=False, p=p)
+            rated_topics = np.random.choice(range(100), size=scores_per_r, replace=False, p=p)
             rated_topics_idx = sim_topics[rated_topics]
             counts[rated_topics] += 1
 
