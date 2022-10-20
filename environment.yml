@@ -10,7 +10,6 @@ dependencies:
   - pymc>=4
   - arviz
   - xarray
-  - theano
-
+  - seaborn
 
 
