@@ -13,4 +13,5 @@ dependencies:
   - seaborn
   - numpyro
   - statsmodels
+  - jax
 
