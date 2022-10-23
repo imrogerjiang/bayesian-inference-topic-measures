@@ -18,7 +18,7 @@ from pymc.sampling_jax import sample_numpyro_nuts
 from time import time
 
 
-# python3 simulate_sig_test.py --p_diff 0.055 --n_raters "(20,100)" --scores_per_r 38 --n_sims 1000 --out "test"
+# python3 simulate_sig_test.py --p_diff 0.055 --n_raters "(20,100)" --scores_per_r 38 --n_sims 1 --out "test"
 
 
 if __name__ == "__main__":
@@ -373,7 +373,7 @@ if __name__ == "__main__":
 
 
                 if np_random_state==None:
-                    with open(f"data/{out}/{out}.csv", mode="a") as f:
+                    with open(f"data/simulations/{out}.csv", mode="a") as f:
                         f.write(sim_results.to_csv(None, index=False, header=False))
                     print(f"Simulation:{sim_id}, Trial:{trial_id}, Cummulative time:{time() - start_time:.2f}")
                 else:
