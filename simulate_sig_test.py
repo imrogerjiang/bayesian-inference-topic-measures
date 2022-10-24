@@ -16,6 +16,7 @@ from downcast import downcast_df
 import jax
 from pymc.sampling_jax import sample_numpyro_nuts
 from time import time
+from concurrent.futures import ProcessPoolExecutor
 
 
 # python3 simulate_sig_test.py --p_diff 0.055 --n_raters "(20,100)" --scores_per_r 38 --n_sims 1 --out "test"
@@ -82,13 +83,6 @@ if __name__ == "__main__":
         df = pd.DataFrame(
             np.array([col_p_diff, col_n_raters, col_scores_per_r, col_total_scores]).T,
             columns=["p_diff", "n_raters", "scores_per_r", "total_scores"])
-
-        df = df.astype({
-            "p_diff":float,
-            "n_raters":np.uint16,
-            "scores_per_r":np.uint16,
-            "total_scores":np.uint16
-        })
 
         return df
     
@@ -299,7 +293,7 @@ if __name__ == "__main__":
             c_diff = pm.Deterministic("c_diff", c_mean.reshape([n_cordels,1]) - c_mean.reshape([1,n_cordels]), dims="obs_id")
 
             if SAMPLE_JAX:
-                glm["trace"]=sample_numpyro_nuts(chains=n_chains, random_seed=np.random.randint(2**20))#, chain_method="vectorized")
+                glm["trace"]=sample_numpyro_nuts(chains=1, random_seed=np.random.randint(2**20), chain_method=chain_method)
             else:
                 glm["trace"]=pm.sample(chains=n_chains, random_seed=np.random.randint(2**20))
 
@@ -307,39 +301,17 @@ if __name__ == "__main__":
 
         return  n_negatives/len(sample)
 
-    
-# Simulates and tests scores for significance
-    def simulate_sig_tests(n_sims, p_diff, n_raters=None, scores_per_r=None, 
-                       total_scores=None, trials_per_sim=1, np_random_state=None):
-    # Bug: Random_state only reproduces scores. Does not reproduce bayesian inference.
-    # Reproduce usage: set np_random_state to index of simulation/trial (sim_id*trials_per_sim + trial_id)
+    def simulate_1_setting(sim_settings):
+        try:
+            sim_id = int(sim_settings[1]["sim_id"])
+            p_diff = sim_settings[1]["p_diff"]
+            n_raters = int(sim_settings[1]["n_raters"])
+            scores_per_r = int(sim_settings[1]["scores_per_r"])
+            total_scores = int(sim_settings[1]["total_scores"])
 
-        if np_random_state!=None:
-            n_sims=1
-            trials_per_sim=1
-
-        # Checking only 2 of 3 score and rater variables is declared
-        count_none = sum([n_raters == None, scores_per_r == None, total_scores == None])
-        assert(count_none == 1)
-
-        # Generate settings for each simulation
-        settings_df = generate_sim_settings(n_sims=n_sims, p_diff=p_diff, n_raters=n_raters, 
-                                            scores_per_r=scores_per_r, total_scores=total_scores)
-
-        for sim_id in range(n_sims):
-            # Reading settings
-            p_diff = settings_df.loc[sim_id, "p_diff"].item()
-            n_raters = settings_df.loc[sim_id, "n_raters"].item()
-            scores_per_r = settings_df.loc[sim_id, "scores_per_r"].item()
-            total_scores = settings_df.loc[sim_id, "total_scores"].item()
-
-            # Reading or dumping np.random.RandomState
-            if np_random_state==None:
-                with open(f"data/{out}/{sim_id*trials_per_sim}.pickle", "wb") as f:
-                    pickle.dump(np.random.get_state(), f)
-            else:
-                with open(f"data/{out}/{np_random_state}.pickle", "rb") as f:
-                    np.random.set_state(pickle.load(f))
+            # Dumping np.random.RandomState
+            with open(f"data/{out}/{sim_id*trials_per_sim}.pickle", "wb") as f:
+                pickle.dump(np.random.get_state(), f)
 
             scores = simulate_scores(
                 glm_rater_topic_cordel,
@@ -372,16 +344,15 @@ if __name__ == "__main__":
                 })
 
 
-                if np_random_state==None:
-                    with open(f"data/simulations/{out}.csv", mode="a") as f:
-                        f.write(sim_results.to_csv(None, index=False, header=False))
-                    print(f"Simulation:{sim_id}, Trial:{trial_id}, Cummulative time:{time() - start_time:.2f}")
-                else:
-                    return scores, sim_results
+                with open(f"data/simulations/{out}.csv", mode="a") as f:
+                    f.write(sim_results.to_csv(None, index=False, header=False))
+                print(f"Simulation:{sim_id}, Trial:{trial_id}, Cummulative time:{time() - start_time:.2f}")
+        except Exception as e:
+            print(e)
+        finally:
+            return
 
-        return
-    
-    
+
     # ====================== Checking Input  ====================== #
     def convert_range(string, t=float):
         try:
@@ -399,7 +370,8 @@ if __name__ == "__main__":
         "n_sims=",
         "trials_per_sim=",
         "seed=",
-        "out=",])
+        "out=",
+        "chain_method="])
 
     # Default values
     p_diff=0.055
@@ -410,6 +382,7 @@ if __name__ == "__main__":
     trials_per_sim=1
     seed=42
     out=None
+    chain_method = "vectorized"
 
     for opt, value in options:
         if opt == "--p_diff": p_diff = convert_range(value, t=float)
@@ -419,6 +392,7 @@ if __name__ == "__main__":
         elif opt == "--trials_per_sim": trials_per_sim = int(value.strip())
         elif opt == "--seed": seed = int(value.strip())
         elif opt == "--out": out = value.strip()
+        elif opt == "--chain_method": chain_method = value.strip()
 
     print(f"""
     p_diff={p_diff}, {type(p_diff)}
@@ -429,6 +403,7 @@ if __name__ == "__main__":
     trials_per_sim={trials_per_sim}, {type(trials_per_sim)}
     seed={seed}, {type(seed)}
     out={out}, {type(out)}
+    chain_method={chain_method}, {type(chain_method)}
     """)
 
     # Checking that only of three rater/score is none
@@ -439,7 +414,7 @@ if __name__ == "__main__":
     assert out!=None, "Please specify a valid out file"
 
 
-    # ====================== Runing Simulation ====================== #
+    # ====================== Read file and setup ====================== #
     # Setting numpy seed
     np.random.seed(seed)
     
@@ -502,7 +477,7 @@ if __name__ == "__main__":
     n_topics = data["topic_id"].nunique()
 
     rater_array = np.array(data["rater_id"])
-    n_raters = data["rater_id"].nunique()
+    obs_n_raters = data["rater_id"].nunique()
 
     score_array = np.array(data["intrusion"])
 
@@ -510,8 +485,9 @@ if __name__ == "__main__":
     topic_cordel_ids = pd.merge(topic_ids, cordel_ids, on=["corpus", "model"], how="left")
 
 
+    # ====================== Infer generative model params ====================== #
     # Model and MCMC specifications
-    n_chains = 1
+    n_chains = 1 #4
     empirical_mean = logit(0.75)
     r_lambda = 2
     t_lambda = 1
@@ -531,7 +507,7 @@ if __name__ == "__main__":
         cordels = pm.Data("cordels", cordel_array, mutable=True, dims="obs_id")
 
         sigma_r = pm.Exponential("sigma_r", lam=r_lambda)
-        zr = pm.Normal("zr",mu=0, sigma=1, shape=n_raters)
+        zr = pm.Normal("zr",mu=0, sigma=1, shape=obs_n_raters)
         sigma_a = pm.Exponential("sigma_a", lam=t_lambda)
         za = pm.Normal("za",mu=0, sigma=t_sigma, shape=(n_cordels, n_topics)) 
         mu = pm.Normal("mu",mu=empirical_mean, sigma=mu_sigma, shape=n_cordels)
@@ -555,13 +531,20 @@ if __name__ == "__main__":
             glm_rater_topic_cordel["trace"]=pm.sample(chains=n_chains, random_seed=seed)
     
     glm_rater_topic_cordel["summary_stat"] = create_summary_stat(glm_rater_topic_cordel["trace"])
+
+
+    # ====================== Simulation ====================== #
+    # Generate settings for each simulation
+    settings_df = generate_sim_settings(n_sims=n_sims, p_diff=p_diff, n_raters=n_raters, 
+                                        scores_per_r=scores_per_r, total_scores=total_scores)
+    settings_df["sim_id"] = settings_df.index
+
+#     with ProcessPoolExecutor(max_workers=1) as executor:
+#         executor.map(simulate_1_setting, settings_df.iterrows())
     
-    
-    simulate_sig_tests(
-        p_diff = p_diff,
-        n_raters = n_raters,
-        scores_per_r = scores_per_r,
-        total_scores = total_scores,
-        n_sims = n_sims,
-        trials_per_sim=trials_per_sim
-    )
+    for sim_settings in settings_df.iterrows():
+        simulate_1_setting(sim_settings)
+
+            
+            
+            
