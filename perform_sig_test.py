@@ -1,6 +1,8 @@
 from getopt import getopt
+import cloudpickle
 import pickle
 import sys
+import os
 import numpy as np
 import pandas as pd
 # import seaborn as sns
@@ -14,14 +16,13 @@ from modeltools import mcmc_diagnostics, create_summary_stat
 from downcast import downcast_df
 import jax
 from pymc.sampling_jax import sample_numpyro_nuts
-from time import time, sleep, timedelta
-
-# python3 simulate_sig_test.py --p_diff 0.055 --n_raters "(20,100)" --scores_per_r 38 --n_sims 1 --out "test"
+from time import time, sleep
+from datetime import timedelta
 
 if __name__ == "__main__":
     
         # Simulate scores
-    def simulate_scores(model, p_diff=0.08, n_raters=40, scores_per_r=40, n_trials=1_000):
+    def simulate_scores(model, p_diff=0.08, n_raters=40, scores_per_r=40, trials_per_sim=1_000, seed=42):
     
         def resample(all_ids, param, size, bound=0.1):
             # resampling raters and topics such that effects sum to 0.
@@ -40,10 +41,14 @@ if __name__ == "__main__":
             return ids
 
         
+        # Setting numpy seed
+        np.random.seed(seed)
+        
+        # Creating df schema
         ps_data = pd.DataFrame(columns=["trial_id", "sim_cordel_id", "sim_topic_id", "sim_rater_id", 
                                         "cordel_id", "topic_id", "rater_id"], dtype=np.int16)
 
-        for trial_id in range(n_trials):
+        for trial_id in range(trials_per_sim):
 
             # data template
             sim_data = pd.DataFrame(columns=["trial_id", "cordel_id", "topic_id", "rater_id"])  
@@ -114,7 +119,7 @@ if __name__ == "__main__":
                            ,dtype=np.int16)
 
     # TODO: add chain options
-        for trial_id in range(n_trials):
+        for trial_id in range(trials_per_sim):
             # Setting data containing rater/topic interaction
             sim_data = ps_data[ps_data["trial_id"]==trial_id]
             sim_rater_array = np.array(sim_data["rater_id"], dtype=int)
@@ -128,7 +133,7 @@ if __name__ == "__main__":
                     "topics":topic_array, 
                     "cordels":cordel_array})
                 postrr_sim=pm.sample_posterior_predictive(trace.posterior.sel(
-                    {"chain":[0], "draw":[np.random.randint(n_trials) if n_trials==1 else trial_id]})
+                    {"chain":[0], "draw":[np.random.randint(trials_per_sim) if trials_per_sim==1 else trial_id]})
                     ,predictions=True, progressbar=False, random_seed=np.random.randint(2**20))
 
             # Adding results to sim_scores
@@ -182,7 +187,6 @@ if __name__ == "__main__":
         n_raters = sample["sim_rater_id"].nunique()
 
         score_array = np.array(sample["intrusion"])
-
 
         # Model and MCMC specifications
         empirical_mean = logit(0.75)
@@ -246,29 +250,29 @@ if __name__ == "__main__":
     argv = sys.argv[1:]
     options, args = getopt(argv, "",[
         "process=",
-        "trials_per_sim=",
         "seed=",
+        "trials_per_sim=",
         "sim_name=",
         "chain_method="])
 
     # Default values
     process_n=None
-    trials_per_sim=1
     seed=42
+    trials_per_sim=1
     sim_name=None
     chain_method = "vectorized"
 
     for opt, value in options:
         if opt == "--process": process_n = int(value.strip())
-        elif opt == "--trials_per_sim": trials_per_sim = int(value.strip())
         elif opt == "--seed": seed = int(value.strip())
+        elif opt == "--trials_per_sim": trials_per_sim = int(value.strip())
         elif opt == "--sim_name": sim_name = value.strip()
         elif opt == "--chain_method": chain_method = value.strip()
 
     print(f"""
     process={process_n}
-    trials_per_sim={trials_per_sim}
     seed={seed}
+    trials_per_sim={trials_per_sim}
     sim_name={sim_name}
     chain_method={chain_method}
     """)
@@ -278,20 +282,26 @@ if __name__ == "__main__":
     
     sleep(process_n)
     
-    # ====================== Read file and setup ====================== #
-    # Setting numpy seed
-    np.random.seed(seed)
+    # File indicates process is running
+    with open(f"data/{sim_name}/process_{process_n}_running", "w") as f:
+        pass
     
+    # ====================== Read Model and setup ====================== #
     # GPU setting
     SAMPLE_JAX = True
     N_PROCESSES = 6
-    
+
     # Time
     start_time = time()
-    
+
+    # GPU setting
+    SAMPLE_JAX = True
+    N_PROCESSES = 6
+
+    # Time
     raw_data = pd.read_csv("data/unit_level_ratings.csv",index_col = 0)
     raw_data = raw_data.sort_values(by=["corpus", "model", "topic"])
-    
+
     # Creating identifier for each corpus, model, and topic
     # Identifier is unique for topic 
     corpus_ids = (raw_data.groupby(["corpus"], as_index=False)
@@ -326,7 +336,7 @@ if __name__ == "__main__":
     data = pd.merge(d4, topic_ids, on=["corpus", "model", "topic"], how="left")
     data = data[["corpus_id", "model_id", "cordel_id", "topic_id", "rater_id", "intrusion", "confidence"]]
     data, na_s = downcast_df(data)
-    
+
     # Setting up numpy arrays for pymc
     corpus_array = np.array(data["corpus_id"])
     n_corpora = data["corpus_id"].nunique()
@@ -348,100 +358,77 @@ if __name__ == "__main__":
     # Adding cordel id to topic_ids dataframe
     topic_cordel_ids = pd.merge(topic_ids, cordel_ids, on=["corpus", "model"], how="left")
 
+    # Reading model
+    with open("bayesian_model/glmm.pickle", "rb") as f:
+        inferred_glmm = cloudpickle.load(f)
 
-    # ====================== Infer generative model params ====================== #
-    # Model and MCMC specifications
-    n_chains = 1
-    empirical_mean = logit(0.75)
-    r_lambda = 2
-    t_lambda = 1
-    t_sigma = 1
-    # cm_lambda = 2
-    # cm_sigma = 1
-    mu_sigma = 1
-
-    glm_rater_topic_cordel = {"model":pm.Model()}
-
-    # Rater, Topic, Cordel model
-    glm_rater_topic_cordel["model"] = pm.Model()
-    with glm_rater_topic_cordel["model"]:
-        # Hyperparameter priors
-        raters = pm.Data("raters", rater_array, mutable=True, dims="obs_id")
-        topics = pm.Data("topics", topic_array, mutable=True, dims=["cordel", "topic"])
-        cordels = pm.Data("cordels", cordel_array, mutable=True, dims="obs_id")
-
-        sigma_r = pm.Exponential("sigma_r", lam=r_lambda)
-        zr = pm.Normal("zr",mu=0, sigma=1, shape=obs_n_raters)
-        sigma_a = pm.Exponential("sigma_a", lam=t_lambda)
-        za = pm.Normal("za",mu=0, sigma=t_sigma, shape=(n_cordels, n_topics)) 
-        mu = pm.Normal("mu",mu=empirical_mean, sigma=mu_sigma, shape=n_cordels)
-
-        s = pm.Bernoulli(
-                "s", 
-                p=pm.math.invlogit(
-                    mu[cordels]+
-                    za[topics[0],topics[1]]*sigma_a+
-                    zr[raters]*sigma_r),
-                observed=score_array, 
-                dims="obs_id")
-
-        c_mean = pm.Deterministic("c_mean", 
-                                  pm.math.invlogit(mu + (za.T*sigma_a)).mean(axis=0), 
-                                  dims="obs_id")
-
-        if SAMPLE_JAX:
-            glm_rater_topic_cordel["trace"]=sample_numpyro_nuts(chains=n_chains, random_seed=seed)#, chain_method="vectorized")
-        else:
-            glm_rater_topic_cordel["trace"]=pm.sample(chains=n_chains, random_seed=seed)
-    
-    glm_rater_topic_cordel["summary_stat"] = create_summary_stat(glm_rater_topic_cordel["trace"])
-    
-    
     # ====================== Simulation ====================== #
-    sim_settings = pd.read_csv(f"data/{sim_name}/sim_settings_{process_n}.csv")
+    # Terminate program after 30 models
+    MAX_RUNS = 30
     
-    for sim_setting in sim_settings.iterrows():
-        sim_id = int(sim_setting[1]["sim_id"])
-        p_diff = sim_setting[1]["p_diff"]
-        n_raters = int(sim_setting[1]["n_raters"])
-        scores_per_r = int(sim_setting[1]["scores_per_r"])
-        total_scores = int(sim_setting[1]["total_scores"])
+    # Read simulation settings
+    sim_settings_file = f"data/{sim_name}/sim_settings_{process_n}.csv"
+    sim_settings = pd.read_csv(sim_settings_file)
 
+    for run in range(MAX_RUNS):
+        
+        sim_id = int(sim_settings.iloc[0]["sim_id"])
+        p_diff = sim_settings.iloc[0]["p_diff"]
+        n_raters = int(sim_settings.iloc[0]["n_raters"])
+        scores_per_r = int(sim_settings.iloc[0]["scores_per_r"])
+        total_scores = int(sim_settings.iloc[0]["total_scores"])
+        trial_id = trials_per_sim - int(sim_settings.iloc[0]["trials"])
+        
         # Dumping np.random.RandomState
-        with open(f"data/{sim_name}/{sim_id*trials_per_sim}.pickle", "wb") as f:
-            pickle.dump(np.random.get_state(), f)
+        with open(f"data/{sim_name}/{sim_id*trials_per_sim + trial_id}.pickle", "wb") as f:
+                pickle.dump(np.random.get_state(), f)
 
         scores = simulate_scores(
-            glm_rater_topic_cordel,
+            inferred_glmm,
             p_diff=p_diff,
             n_raters=n_raters,
             scores_per_r=scores_per_r,
-            n_trials=trials_per_sim)
+            trials_per_sim=1,
+            seed=seed+sim_id*trials_per_sim+trial_id
+        )
 
-        for trial_id in range(trials_per_sim):
-            if trial_id != 0:
-                with open(f"data/{sim_name}/{sim_id*trials_per_sim+trial_id}.pickle", "wb") as f:
-                        pickle.dump(np.random.get_state(), f)
+        sim_results = pd.DataFrame(
+            [[sim_id, trial_id, p_diff, n_raters, scores_per_r, total_scores, 
+             propz_pval(scores),
+             bht_pval(scores, n_chains=1)]],
+            columns=["sim_id", "trial_id", "p_diff", "n_raters",  "scores_per_r", "total_scores", 
+                     "propz_pval", "bht_pval"])
 
-            sim_results = pd.DataFrame(
-                [[sim_id, p_diff, n_raters, scores_per_r, total_scores, trial_id, 
-                 propz_pval(scores[scores["trial_id"]==trial_id]),
-                 bht_pval(scores[scores["trial_id"]==trial_id], n_chains=n_chains)]],
-                columns=["sim_id", "p_diff", "n_raters",  "scores_per_r", "total_scores", "trial_id", 
-                         "propz_pval", "bht_pval"])
+        sim_results = sim_results.astype({
+            "sim_id":int,
+            "trial_id":int,
+            "p_diff":float,
+            "n_raters":np.uint16,
+            "scores_per_r":np.uint16, 
+            "total_scores":np.uint16,
+            "propz_pval":float, 
+            "bht_pval":float,
+        })
 
-            sim_results = sim_results.astype({
-                "sim_id":int,
-                "trial_id":int,
-                "p_diff":float,
-                "n_raters":np.uint16,
-                "scores_per_r":np.uint16, 
-                "total_scores":np.uint16,
-                "propz_pval":float, 
-                "bht_pval":float,
-            })
+        # Write results to file
+        with open(f"data/simulations/{sim_name}.csv", mode="a") as f:
+            f.write(sim_results.to_csv(None, index=False, header=False))
 
+        # Decrementing trials var on file
+        # If only 1 trial remaining on file, delete file
+        if sum(sim_settings["trials"]) == 1:
+            os.remove(sim_settings_file)
+            break
+        # If only 1 trial remaining on row, delete row
+        elif sim_settings[sim_settings["sim_id"]==sim_id]["trials"].item() == 1:
+            sim_settings=sim_settings[sim_settings["sim_id"]!=sim_id]
+            sim_settings.to_csv(sim_settings_file, index=False)
+        # Otherwise decrement trial by 1
+        else:
+            sim_settings.loc[sim_settings["sim_id"]==sim_id, "trials"] -= 1
+            sim_settings.to_csv(sim_settings_file, index=False)
 
-            with open(f"data/simulations/{sim_name}.csv", mode="a") as f:
-                f.write(sim_results.to_csv(None, index=False, header=False))
-            print(f"===== Simulation-{sim_id}, Trial-{trial_id}, Cumulative time-{timedelta(seconds=time() - start_time)} =====")
+        print(f"===== Simulation-{sim_id}, Trial-{trial_id}, Cumulative time-{timedelta(seconds=time() - start_time)} =====")
+    
+#     Deleting running file to start new process.
+    os.remove(f"data/{sim_name}/process_{process_n}_running")
