@@ -79,21 +79,25 @@ if __name__ == "__main__":
         "scores_per_r=",
         "total_scores=",
         "n_sims=",
+        "sim_id=",
         "trials_per_sim=",
         "seed=",
         "sim_name=",
-        "chain_method="])
+        "chain_method="
+        "clean_dir="])
 
     # Default values
     p_diff=0.055
     n_raters=None
     scores_per_r=None
     total_scores=None
-    n_sims=1000
+    n_sims=None
+    sim_id=None
     trials_per_sim=1
     seed=42
     sim_name=None
     chain_method = "vectorized"
+    clean_dir=True
 
     for opt, value in options:
         if opt == "--p_diff": p_diff = convert_range(value, t=float)
@@ -105,6 +109,7 @@ if __name__ == "__main__":
         elif opt == "--seed": seed = int(value.strip())
         elif opt == "--sim_name": sim_name = value.strip()
         elif opt == "--chain_method": chain_method = value.strip()
+        elif opt == "--clean_dir": clean_dir = value.strip() == True
 
     print(f"""
     p_diff={p_diff}, {type(p_diff)}
@@ -116,13 +121,14 @@ if __name__ == "__main__":
     seed={seed}, {type(seed)}
     sim_name={sim_name}, {type(sim_name)}
     chain_method={chain_method}, {type(chain_method)}
+    clean_dir={clean_dir}, {type(clean_dir)}
     """)
 
     # Checking that only of three rater/score is none
     count_none = sum([n_raters==None, scores_per_r==None, total_scores==None])
-    assert(count_none == 1), "Please specify two of: n_raters, scores_per_r, total_scores"
-
+    assert count_none == 1, "Please specify two of: n_raters, scores_per_r, total_scores"
     assert sim_name!=None, "Please specify the simulation name"
+    assert n_sims==None or sim_id==None, "Only one of n_sims or sim_id should be input"
 
     # ====================== Simulation ====================== #
     # Number of processes created
@@ -132,26 +138,45 @@ if __name__ == "__main__":
     settings_df = generate_sim_settings(n_sims=n_sims, trials_per_sim=trials_per_sim, p_diff=p_diff, 
                                         n_raters=n_raters, scores_per_r=scores_per_r, total_scores=total_scores)
     
-    settings_df.to_csv(
-        f"data/{sim_name}/sim_settings.csv",
-        index=False)
+    # Export settings_df
+    if sim_id == None:
+        settings_df.to_csv(
+            f"data/{sim_name}/sim_settings.csv",
+            index=False)
+    else:
+        with open(f"data/{sim_name}/sim_settings.csv", "a"):
+            f.write(settings_df.to_csv(None, index=False, header=False)
     
     settings_df = settings_df.rename(columns={"trials_per_sim":"trials"})
     
-    total = len(settings_df)
+    if n_sims != None:
+        total = len(settings_df)
+    elif sim_id != None:
+        total = trials_per_sim
+                    
     start = 0
     for i in range(N_PROCESSES):
         if i < total%N_PROCESSES:
             end = start + total//N_PROCESSES + 1
         else:
             end = start + total//N_PROCESSES
-            
-        settings_df[start:end].to_csv(
-            f"data/{sim_name}/sim_settings_{i}.csv",
-            index=False)
+        
+        # if number of simulations is specified, split by simulations
+        if n_sims != None:
+            settings_df[start:end].to_csv(
+                f"data/{sim_name}/sim_settings_{i}.csv",
+                index=False)
+        
+        # If sim_id is specified, split by trials
+        elif sim_id != None:
+            settings_df["trials"] = end
+            settings_df.to_csv(
+                f"data/{sim_name}/sim_settings_{i}.csv",
+                index=False)
         
         start = end
         
     # Create Header file
-    with open(f"data/simulations/{sim_name}.csv", "w") as f:
-        f.write("sim_id,trial_id,p_diff,n_raters,cores_per_r,total_scores,propz_pval,bht_pval\n")
+    if sim_id == None:
+        with open(f"data/simulations/{sim_name}.csv", "w") as f:
+            f.write("sim_id,trial_id,p_diff,n_raters,cores_per_r,total_scores,propz_pval,bht_pval\n")

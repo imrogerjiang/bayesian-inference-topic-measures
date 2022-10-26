@@ -250,6 +250,7 @@ if __name__ == "__main__":
     argv = sys.argv[1:]
     options, args = getopt(argv, "",[
         "process=",
+        "n_runs=",
         "seed=",
         "trials_per_sim=",
         "sim_name=",
@@ -257,6 +258,7 @@ if __name__ == "__main__":
 
     # Default values
     process_n=None
+    n_runs=30
     seed=42
     trials_per_sim=1
     sim_name=None
@@ -264,6 +266,7 @@ if __name__ == "__main__":
 
     for opt, value in options:
         if opt == "--process": process_n = int(value.strip())
+        elif opt == "--n_runs": n_runs = int(value.strip())
         elif opt == "--seed": seed = int(value.strip())
         elif opt == "--trials_per_sim": trials_per_sim = int(value.strip())
         elif opt == "--sim_name": sim_name = value.strip()
@@ -271,6 +274,7 @@ if __name__ == "__main__":
 
     print(f"""
     process={process_n}
+    n_runs={n_runs}
     seed={seed}
     trials_per_sim={trials_per_sim}
     sim_name={sim_name}
@@ -363,14 +367,12 @@ if __name__ == "__main__":
         inferred_glmm = cloudpickle.load(f)
 
     # ====================== Simulation ====================== #
-    # Terminate program after 30 models
-    MAX_RUNS = 30
     
     # Read simulation settings
     sim_settings_file = f"data/{sim_name}/sim_settings_{process_n}.csv"
     sim_settings = pd.read_csv(sim_settings_file)
 
-    for run in range(MAX_RUNS):
+    for run in range(n_runs):
         
         sim_id = int(sim_settings.iloc[0]["sim_id"])
         p_diff = sim_settings.iloc[0]["p_diff"]
