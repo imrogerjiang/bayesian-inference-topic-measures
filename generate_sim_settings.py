@@ -10,7 +10,7 @@ from time import time
 if __name__ == "__main__":
     
     # Create simulation settings template
-    def generate_sim_settings(n_sims, p_diff, n_raters=None, scores_per_r=None, total_scores=None):
+    def generate_sim_settings(n_sims, trials_per_sim, p_diff, n_raters=None, scores_per_r=None, total_scores=None):
 
         # Checking only 2 of 3 score and rater variables is declared
         count_none = sum([n_raters == None, scores_per_r == None, total_scores == None])
@@ -48,11 +48,14 @@ if __name__ == "__main__":
             raise Exception("How did you even get this exception? Should've been impossible, but congratulations")
 
         df = pd.DataFrame(
-            np.array([range(n_sims), col_p_diff, col_n_raters, col_scores_per_r, col_total_scores]).T,
-            columns=["sim_id", "p_diff", "n_raters", "scores_per_r", "total_scores"])
+            np.array([range(n_sims), [trials_per_sim]*n_sims, col_p_diff, 
+                      col_n_raters, col_scores_per_r, col_total_scores]).T,
+            columns=["sim_id", "trials_per_sim", "p_diff", 
+                     "n_raters", "scores_per_r", "total_scores"])
         
         df = df.astype({
             "sim_id":int,
+            "trials_per_sim":int,
             "p_diff":float,
             "n_raters":np.uint16,
             "scores_per_r":np.uint16,
@@ -76,6 +79,7 @@ if __name__ == "__main__":
         "scores_per_r=",
         "total_scores=",
         "n_sims=",
+        "trials_per_sim=",
         "seed=",
         "sim_name=",
         "chain_method="])
@@ -86,6 +90,7 @@ if __name__ == "__main__":
     scores_per_r=None
     total_scores=None
     n_sims=1000
+    trials_per_sim=1
     seed=42
     sim_name=None
     chain_method = "vectorized"
@@ -96,6 +101,7 @@ if __name__ == "__main__":
         elif opt == "--scores_per_r": scores_per_r = convert_range(value, t=int)
         elif opt == "--total_scores": total_scores = convert_range(value, t=int)
         elif opt == "--n_sims": n_sims = int(value.strip())
+        elif opt == "--trials_per_sim": trials_per_sim = int(value.strip())
         elif opt == "--seed": seed = int(value.strip())
         elif opt == "--sim_name": sim_name = value.strip()
         elif opt == "--chain_method": chain_method = value.strip()
@@ -106,6 +112,7 @@ if __name__ == "__main__":
     scores_per_r={scores_per_r}, {type(scores_per_r)}
     total_scores={total_scores}, {type(total_scores)}
     n_sims={n_sims}, {type(n_sims)}
+    trials_per_sim={trials_per_sim}
     seed={seed}, {type(seed)}
     sim_name={sim_name}, {type(sim_name)}
     chain_method={chain_method}, {type(chain_method)}
@@ -115,19 +122,21 @@ if __name__ == "__main__":
     count_none = sum([n_raters==None, scores_per_r==None, total_scores==None])
     assert(count_none == 1), "Please specify two of: n_raters, scores_per_r, total_scores"
 
-    assert sim_name!=None, "Please specify a valid out file"
+    assert sim_name!=None, "Please specify the simulation name"
 
     # ====================== Simulation ====================== #
     # Number of processes created
     N_PROCESSES = 6
         
     # Generate settings for each simulation
-    settings_df = generate_sim_settings(n_sims=n_sims, p_diff=p_diff, n_raters=n_raters, 
-                                        scores_per_r=scores_per_r, total_scores=total_scores)
+    settings_df = generate_sim_settings(n_sims=n_sims, trials_per_sim=trials_per_sim, p_diff=p_diff, 
+                                        n_raters=n_raters, scores_per_r=scores_per_r, total_scores=total_scores)
     
     settings_df.to_csv(
         f"data/{sim_name}/sim_settings.csv",
         index=False)
+    
+    settings_df = settings_df.rename(columns={"trials_per_sim":"trials"})
     
     total = len(settings_df)
     start = 0
@@ -145,4 +154,4 @@ if __name__ == "__main__":
         
     # Create Header file
     with open(f"data/simulations/{sim_name}.csv", "w") as f:
-        f.write("sim_id,p_diff,n_raters,cores_per_r,total_scores,trial_id,propz_pval,bht_pval\n")
+        f.write("sim_id,trial_id,p_diff,n_raters,cores_per_r,total_scores,propz_pval,bht_pval\n")
