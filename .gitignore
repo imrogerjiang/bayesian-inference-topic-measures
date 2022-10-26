@@ -1,6 +1,7 @@
 requirements.txt
 data/sig_n_raters/*
 data/test/*
+bayesian_model
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
