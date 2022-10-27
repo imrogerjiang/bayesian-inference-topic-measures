@@ -1,4 +1,5 @@
 import sys
+import os
 from getopt import getopt
 import numpy as np
 import pandas as pd
@@ -10,8 +11,10 @@ from time import time
 if __name__ == "__main__":
     
     # Create simulation settings template
-    def generate_sim_settings(n_sims, trials_per_sim, p_diff, n_raters=None, scores_per_r=None, total_scores=None):
-
+    def generate_sim_settings(n_sims, trials_per_sim, p_diff, sim_id=None, n_raters=None, scores_per_r=None, total_scores=None):
+        if sim_id != None: n_sims=1
+        print(n_sims)
+        
         # Checking only 2 of 3 score and rater variables is declared
         count_none = sum([n_raters == None, scores_per_r == None, total_scores == None])
         assert count_none == 1, "There should be 2 score/rater variables declared"
@@ -46,12 +49,19 @@ if __name__ == "__main__":
             col_total_scores = col_scores_per_r * col_n_raters
         else:
             raise Exception("How did you even get this exception? Should've been impossible, but congratulations")
-
-        df = pd.DataFrame(
-            np.array([range(n_sims), [trials_per_sim]*n_sims, col_p_diff, 
-                      col_n_raters, col_scores_per_r, col_total_scores]).T,
-            columns=["sim_id", "trials_per_sim", "p_diff", 
-                     "n_raters", "scores_per_r", "total_scores"])
+        
+        if sim_id==None:
+            df = pd.DataFrame(
+                np.array([range(n_sims), [trials_per_sim]*n_sims, col_p_diff, 
+                          col_n_raters, col_scores_per_r, col_total_scores]).T,
+                columns=["sim_id", "trials_per_sim", "p_diff", 
+                         "n_raters", "scores_per_r", "total_scores"])
+        else:
+            df = pd.DataFrame(
+                np.array([[sim_id], [trials_per_sim], col_p_diff, 
+                          col_n_raters, col_scores_per_r, col_total_scores]).T,
+                columns=["sim_id", "trials_per_sim", "p_diff", 
+                         "n_raters", "scores_per_r", "total_scores"])
         
         df = df.astype({
             "sim_id":int,
@@ -105,6 +115,7 @@ if __name__ == "__main__":
         elif opt == "--scores_per_r": scores_per_r = convert_range(value, t=int)
         elif opt == "--total_scores": total_scores = convert_range(value, t=int)
         elif opt == "--n_sims": n_sims = int(value.strip())
+        elif opt == "--sim_id": sim_id = int(value.strip())
         elif opt == "--trials_per_sim": trials_per_sim = int(value.strip())
         elif opt == "--seed": seed = int(value.strip())
         elif opt == "--sim_name": sim_name = value.strip()
@@ -117,6 +128,7 @@ if __name__ == "__main__":
     scores_per_r={scores_per_r}, {type(scores_per_r)}
     total_scores={total_scores}, {type(total_scores)}
     n_sims={n_sims}, {type(n_sims)}
+    sim_id={sim_id}, {type(sim_id)}
     trials_per_sim={trials_per_sim}
     seed={seed}, {type(seed)}
     sim_name={sim_name}, {type(sim_name)}
@@ -135,16 +147,17 @@ if __name__ == "__main__":
     N_PROCESSES = 6
         
     # Generate settings for each simulation
-    settings_df = generate_sim_settings(n_sims=n_sims, trials_per_sim=trials_per_sim, p_diff=p_diff, 
-                                        n_raters=n_raters, scores_per_r=scores_per_r, total_scores=total_scores)
+    settings_df = generate_sim_settings(n_sims=n_sims, trials_per_sim=trials_per_sim, 
+                                        p_diff=p_diff, sim_id=sim_id, n_raters=n_raters, 
+                                        scores_per_r=scores_per_r, total_scores=total_scores)
     
     # Export settings_df
-    if sim_id == None:
+    if sim_id == None or not os.path.isfile(f"data/{sim_name}/sim_settings.csv"):
         settings_df.to_csv(
             f"data/{sim_name}/sim_settings.csv",
             index=False)
     else:
-        with open(f"data/{sim_name}/sim_settings.csv", "a"):
+        with open(f"data/{sim_name}/sim_settings.csv", "a") as f:
             f.write(settings_df.to_csv(None, index=False, header=False))
     
     settings_df = settings_df.rename(columns={"trials_per_sim":"trials"})
@@ -169,7 +182,7 @@ if __name__ == "__main__":
         
         # If sim_id is specified, split by trials
         elif sim_id != None:
-            settings_df["trials"] = end
+            settings_df["trials"] = end - start
             settings_df.to_csv(
                 f"data/{sim_name}/sim_settings_{i}.csv",
                 index=False)
