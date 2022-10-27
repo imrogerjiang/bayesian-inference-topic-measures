@@ -240,43 +240,36 @@ if __name__ == "__main__":
 
 
     # ====================== Checking Input  ====================== #
-    def convert_range(string, t=float):
-        try:
-            return t(string)
-        except ValueError:
-            nums = string[1:-1].strip().split(",")
-            return (t(nums[0].strip()), t(nums[1].strip()))
-    
     argv = sys.argv[1:]
     options, args = getopt(argv, "",[
         "process=",
         "n_runs=",
-        "seed=",
         "trials_per_sim=",
+        "seed=",
         "sim_name=",
         "chain_method="])
 
     # Default values
     process_n=None
     n_runs=30
-    seed=42
     trials_per_sim=1
+    seed=42
     sim_name=None
     chain_method = "vectorized"
 
     for opt, value in options:
         if opt == "--process": process_n = int(value.strip())
         elif opt == "--n_runs": n_runs = int(value.strip())
-        elif opt == "--seed": seed = int(value.strip())
         elif opt == "--trials_per_sim": trials_per_sim = int(value.strip())
+        elif opt == "--seed": seed = int(value.strip())
         elif opt == "--sim_name": sim_name = value.strip()
         elif opt == "--chain_method": chain_method = value.strip()
 
     print(f"""
     process={process_n}
     n_runs={n_runs}
-    seed={seed}
     trials_per_sim={trials_per_sim}
+    seed={seed}
     sim_name={sim_name}
     chain_method={chain_method}
     """)
@@ -379,27 +372,27 @@ if __name__ == "__main__":
         n_raters = int(sim_settings.iloc[0]["n_raters"])
         scores_per_r = int(sim_settings.iloc[0]["scores_per_r"])
         total_scores = int(sim_settings.iloc[0]["total_scores"])
-        trial_id = trials_per_sim - int(sim_settings.iloc[0]["trials"])
+        trial_id = int(sim_settings.iloc[0]["trial_id"])
         
         # Dumping np.random.RandomState
         with open(f"data/{sim_name}/{sim_id*trials_per_sim + trial_id}.pickle", "wb") as f:
                 pickle.dump(np.random.get_state(), f)
-
+        
+        run_seed = seed + sim_id*trials_per_sim + trial_id
         scores = simulate_scores(
             inferred_glmm,
             p_diff=p_diff,
             n_raters=n_raters,
             scores_per_r=scores_per_r,
             trials_per_sim=1,
-            seed=seed+sim_id*trials_per_sim+trial_id
+            seed=run_seed
         )
 
         sim_results = pd.DataFrame(
             [[sim_id, trial_id, p_diff, n_raters, scores_per_r, total_scores, 
-             propz_pval(scores),
-             bht_pval(scores, n_chains=1)]],
+             propz_pval(scores), bht_pval(scores, n_chains=1), run_seed]],
             columns=["sim_id", "trial_id", "p_diff", "n_raters",  "scores_per_r", "total_scores", 
-                     "propz_pval", "bht_pval"])
+                     "propz_pval", "bht_pval", "seed"])
 
         sim_results = sim_results.astype({
             "sim_id":int,
@@ -410,6 +403,7 @@ if __name__ == "__main__":
             "total_scores":np.uint16,
             "propz_pval":float, 
             "bht_pval":float,
+            "seed":np.uint16,
         })
 
         # Write results to file
@@ -417,18 +411,15 @@ if __name__ == "__main__":
             f.write(sim_results.to_csv(None, index=False, header=False))
 
         # Decrementing trials var on file
-        # If only 1 trial remaining on file, delete file
-        if sum(sim_settings["trials"]) == 1:
+        # If only 1 row remaining on file, delete file
+        if len(sim_settings) == 1:
             os.remove(sim_settings_file)
             break
-        # If only 1 trial remaining on row, delete row
-        elif sim_settings[sim_settings["sim_id"]==sim_id]["trials"].item() == 1:
-            sim_settings=sim_settings[sim_settings["sim_id"]!=sim_id]
-            sim_settings.to_csv(sim_settings_file, index=False)
-        # Otherwise decrement trial by 1
+        # else delete row
         else:
-            sim_settings.loc[sim_settings["sim_id"]==sim_id, "trials"] -= 1
+            sim_settings=sim_settings[1:]
             sim_settings.to_csv(sim_settings_file, index=False)
+
 
         print(f"===== Simulation-{sim_id}, Trial-{trial_id}, Cumulative time-{timedelta(seconds=time() - start_time)} =====")
     

@@ -13,7 +13,6 @@ if __name__ == "__main__":
     # Create simulation settings template
     def generate_sim_settings(n_sims, trials_per_sim, p_diff, sim_id=None, n_raters=None, scores_per_r=None, total_scores=None):
         if sim_id != None: n_sims=1
-        print(n_sims)
         
         # Checking only 2 of 3 score and rater variables is declared
         count_none = sum([n_raters == None, scores_per_r == None, total_scores == None])
@@ -50,22 +49,22 @@ if __name__ == "__main__":
         else:
             raise Exception("How did you even get this exception? Should've been impossible, but congratulations")
         
-        if sim_id==None:
-            df = pd.DataFrame(
-                np.array([range(n_sims), [trials_per_sim]*n_sims, col_p_diff, 
-                          col_n_raters, col_scores_per_r, col_total_scores]).T,
-                columns=["sim_id", "trials_per_sim", "p_diff", 
+        df = pd.DataFrame()
+        for sim_id in range(n_sims):
+            temp = pd.DataFrame(
+                np.array([[sim_id]*trials_per_sim, 
+                          [i for i in range(trials_per_sim)], 
+                          [col_p_diff[sim_id]]*trials_per_sim, 
+                          [col_n_raters[sim_id]]*trials_per_sim, 
+                          [col_scores_per_r[sim_id]]*trials_per_sim,
+                          [col_total_scores[sim_id]]*trials_per_sim]).T,
+                columns=["sim_id", "trial_id", "p_diff", 
                          "n_raters", "scores_per_r", "total_scores"])
-        else:
-            df = pd.DataFrame(
-                np.array([[sim_id], [trials_per_sim], col_p_diff, 
-                          col_n_raters, col_scores_per_r, col_total_scores]).T,
-                columns=["sim_id", "trials_per_sim", "p_diff", 
-                         "n_raters", "scores_per_r", "total_scores"])
+            df = pd.concat([df, temp])
         
         df = df.astype({
             "sim_id":int,
-            "trials_per_sim":int,
+            "trial_id":int,
             "p_diff":float,
             "n_raters":np.uint16,
             "scores_per_r":np.uint16,
@@ -89,7 +88,6 @@ if __name__ == "__main__":
         "scores_per_r=",
         "total_scores=",
         "n_sims=",
-        "sim_id=",
         "trials_per_sim=",
         "seed=",
         "sim_name=",
@@ -102,7 +100,6 @@ if __name__ == "__main__":
     scores_per_r=None
     total_scores=None
     n_sims=None
-    sim_id=None
     trials_per_sim=1
     seed=42
     sim_name=None
@@ -115,7 +112,6 @@ if __name__ == "__main__":
         elif opt == "--scores_per_r": scores_per_r = convert_range(value, t=int)
         elif opt == "--total_scores": total_scores = convert_range(value, t=int)
         elif opt == "--n_sims": n_sims = int(value.strip())
-        elif opt == "--sim_id": sim_id = int(value.strip())
         elif opt == "--trials_per_sim": trials_per_sim = int(value.strip())
         elif opt == "--seed": seed = int(value.strip())
         elif opt == "--sim_name": sim_name = value.strip()
@@ -128,7 +124,6 @@ if __name__ == "__main__":
     scores_per_r={scores_per_r}, {type(scores_per_r)}
     total_scores={total_scores}, {type(total_scores)}
     n_sims={n_sims}, {type(n_sims)}
-    sim_id={sim_id}, {type(sim_id)}
     trials_per_sim={trials_per_sim}
     seed={seed}, {type(seed)}
     sim_name={sim_name}, {type(sim_name)}
@@ -140,7 +135,6 @@ if __name__ == "__main__":
     count_none = sum([n_raters==None, scores_per_r==None, total_scores==None])
     assert count_none == 1, "Please specify two of: n_raters, scores_per_r, total_scores"
     assert sim_name!=None, "Please specify the simulation name"
-    assert n_sims==None or sim_id==None, "Only one of n_sims or sim_id should be input"
 
     # ====================== Simulation ====================== #
     # Number of processes created
@@ -148,24 +142,17 @@ if __name__ == "__main__":
         
     # Generate settings for each simulation
     settings_df = generate_sim_settings(n_sims=n_sims, trials_per_sim=trials_per_sim, 
-                                        p_diff=p_diff, sim_id=sim_id, n_raters=n_raters, 
+                                        p_diff=p_diff, n_raters=n_raters, 
                                         scores_per_r=scores_per_r, total_scores=total_scores)
     
     # Export settings_df
-    if sim_id == None or not os.path.isfile(f"data/{sim_name}/sim_settings.csv"):
-        settings_df.to_csv(
-            f"data/{sim_name}/sim_settings.csv",
-            index=False)
-    else:
-        with open(f"data/{sim_name}/sim_settings.csv", "a") as f:
-            f.write(settings_df.to_csv(None, index=False, header=False))
+    settings_df.to_csv(
+        f"data/{sim_name}/sim_settings.csv",
+        index=False)
     
     settings_df = settings_df.rename(columns={"trials_per_sim":"trials"})
     
-    if n_sims != None:
-        total = len(settings_df)
-    elif sim_id != None:
-        total = trials_per_sim
+    total = len(settings_df)
                     
     start = 0
     for i in range(N_PROCESSES):
@@ -175,21 +162,12 @@ if __name__ == "__main__":
             end = start + total//N_PROCESSES
         
         # if number of simulations is specified, split by simulations
-        if n_sims != None:
-            settings_df[start:end].to_csv(
-                f"data/{sim_name}/sim_settings_{i}.csv",
-                index=False)
-        
-        # If sim_id is specified, split by trials
-        elif sim_id != None:
-            settings_df["trials"] = end - start
-            settings_df.to_csv(
-                f"data/{sim_name}/sim_settings_{i}.csv",
-                index=False)
+        settings_df[start:end].to_csv(
+            f"data/{sim_name}/sim_settings_{i}.csv",
+            index=False)
         
         start = end
         
     # Create Header file
-    if sim_id == None:
-        with open(f"data/simulations/{sim_name}.csv", "w") as f:
-            f.write("sim_id,trial_id,p_diff,n_raters,cores_per_r,total_scores,propz_pval,bht_pval\n")
+    with open(f"data/simulations/{sim_name}.csv", "w") as f:
+        f.write("sim_id,trial_id,p_diff,n_raters,cores_per_r,total_scores,propz_pval,bht_pval,seed\n")
