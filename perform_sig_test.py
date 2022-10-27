@@ -278,8 +278,7 @@ if __name__ == "__main__":
     
     assert sim_name!=None, "Please specify the simulation name"
     assert process_n!=None, "Please specify the process number"
-    
-    sleep(process_n)
+
     
     # File indicates process is running
     with open(f"data/{sim_name}/process_{process_n}_running", "w") as f:

@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from downcast import downcast_df
 from time import time
+from scipy.stats import uniform
 
 # python3 create_sim_settings.py --n_raters "(20,100)" --scores_per_r 38 --n_sims 10 --sim_name "test"
 
