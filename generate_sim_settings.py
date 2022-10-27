@@ -145,7 +145,7 @@ if __name__ == "__main__":
             index=False)
     else:
         with open(f"data/{sim_name}/sim_settings.csv", "a"):
-            f.write(settings_df.to_csv(None, index=False, header=False)
+            f.write(settings_df.to_csv(None, index=False, header=False))
     
     settings_df = settings_df.rename(columns={"trials_per_sim":"trials"})
     
