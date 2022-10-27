@@ -165,8 +165,10 @@ if __name__ == "__main__":
         return p_val
 
     # Applies bayesian hypothesis test to find p value that model1 > model0
-    def bht_pval(sample, n_chains):
+    def bht_pval(sample, n_chains, seed=None):
         # sample = scores[scores["trial_id"]==0]
+        if seed != None:
+            np.random.seed(seed)
 
     # Bayesian hypothesis tests whether the two distributions in the sample are statisticaly significant
     # Setting up numpy arrays for pymc
@@ -390,7 +392,7 @@ if __name__ == "__main__":
 
         sim_results = pd.DataFrame(
             [[sim_id, trial_id, p_diff, n_raters, scores_per_r, total_scores, 
-             propz_pval(scores), bht_pval(scores, n_chains=1), run_seed]],
+             propz_pval(scores), bht_pval(scores, n_chains=1, seed=run_seed), run_seed]],
             columns=["sim_id", "trial_id", "p_diff", "n_raters",  "scores_per_r", "total_scores", 
                      "propz_pval", "bht_pval", "seed"])
 
