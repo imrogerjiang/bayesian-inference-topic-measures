@@ -19,6 +19,8 @@ from pymc.sampling_jax import sample_numpyro_nuts
 from time import time, sleep
 from datetime import timedelta
 
+# Usage python3 perform_sig_test.py --trials_per_sim 100 --n_runs 5 --process 0 --sim_name "test"
+
 if __name__ == "__main__":
     
         # Simulate scores
@@ -266,7 +268,7 @@ if __name__ == "__main__":
         elif opt == "--seed": seed = int(value.strip())
         elif opt == "--sim_name": sim_name = value.strip()
         elif opt == "--chain_method": chain_method = value.strip()
-
+            
     print(f"""
     process={process_n}
     n_runs={n_runs}
