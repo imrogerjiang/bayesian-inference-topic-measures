@@ -63,7 +63,7 @@ if __name__ == "__main__":
             sim_topics_1 = resample(range(len(topic_cordel_ids)), param="za", size=50, bound=1)
             sim_topics = np.concatenate((sim_topics_0, sim_topics_1))
 
-            # Count of scores for each topic
+            # Running total of scores
             counts = np.zeros(100)
 
             for sim_rater_id, rater in enumerate(raters):
