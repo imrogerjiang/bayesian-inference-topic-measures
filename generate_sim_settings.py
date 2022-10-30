@@ -76,6 +76,8 @@ if __name__ == "__main__":
     
     # ====================== Checking Input  ====================== #
     def convert_range(string, t=float):
+        if string.strip().lower() == "none":
+            return None
         try:
             return t(string)
         except ValueError:
@@ -112,9 +114,9 @@ if __name__ == "__main__":
         elif opt == "--n_raters": n_raters = convert_range(value, t=int)
         elif opt == "--scores_per_r": scores_per_r = convert_range(value, t=int)
         elif opt == "--total_scores": total_scores = convert_range(value, t=int)
-        elif opt == "--n_sims": n_sims = int(value.strip())
-        elif opt == "--trials_per_sim": trials_per_sim = int(value.strip())
-        elif opt == "--seed": seed = int(value.strip())
+        elif opt == "--n_sims": n_sims = convert_range(value, t=int)
+        elif opt == "--trials_per_sim": trials_per_sim = convert_range(value, t=int)
+        elif opt == "--seed": seed = convert_range(value, t=int)
         elif opt == "--sim_name": sim_name = value.strip()
         elif opt == "--chain_method": chain_method = value.strip()
         elif opt == "--clean_dir": clean_dir = value.strip() == True
