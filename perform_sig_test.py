@@ -141,9 +141,9 @@ if __name__ == "__main__":
             # Adding results to sim_scores
             s = (postrr_sim.predictions.to_dataframe().reset_index()
                   .rename(columns={"s":"intrusion"}))
-            this_sim_scores = pd.concat([sim_data.reset_index(drop=True)
+            trial_sim_scores = pd.concat([sim_data.reset_index(drop=True)
                                          ,s["intrusion"]], axis="columns").astype(np.int16)
-            sim_scores = pd.concat([sim_scores, this_sim_scores], axis="index", ignore_index=True)
+            sim_scores = pd.concat([sim_scores, trial_sim_scores], axis="index", ignore_index=True)
         return sim_scores
     
         
