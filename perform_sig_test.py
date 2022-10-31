@@ -298,7 +298,7 @@ if __name__ == "__main__":
     SAMPLE_JAX = True
     N_PROCESSES = 6
 
-    # Time
+    # Reading in data
     raw_data = pd.read_csv("data/unit_level_ratings.csv",index_col = 0)
     raw_data = raw_data.sort_values(by=["corpus", "model", "topic"])
 
