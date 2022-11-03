@@ -19,13 +19,14 @@ from pymc.sampling_jax import sample_numpyro_nuts
 from time import time, sleep
 from datetime import timedelta
 
-# Usage python3 perform_sig_test.py --trials_per_sim 100 --n_runs 5 --process 0 --sim_name "test"
+# Usage python3 perform_sig_test.py --trials_per_sim 100 --n_runs 5 --optimal_alloc "True" --process 0 --sim_name "test"
 
 if __name__ == "__main__":
     
         # Simulate scores
-    def simulate_scores(model, p_diff=0.08, n_raters=40, scores_per_r=40, trials_per_sim=1_000, seed=42):
-    
+    def simulate_scores(model, p_diff=0.08, n_raters=40, scores_per_r=40, total_scores=None, 
+                        trials_per_sim=1_000, seed=42, optimal_allocation=False):
+
         def resample(all_ids, param, size, bound=0.1):
             # resampling raters and topics such that effects sum to 0.
 
@@ -42,10 +43,14 @@ if __name__ == "__main__":
 
             return ids
 
-        
+        def postrr_var(n_success, total):
+            a = n_success+1
+            b = total-n_success+1
+            return a*b/((a+b+1)*(a+b)**2)
+
         # Setting numpy seed
         np.random.seed(seed)
-        
+
         # Creating df schema
         ps_data = pd.DataFrame(columns=["trial_id", "sim_cordel_id", "sim_topic_id", "sim_rater_id", 
                                         "cordel_id", "topic_id", "rater_id"], dtype=np.int16)
@@ -72,8 +77,12 @@ if __name__ == "__main__":
                 p = 1/counts**20
                 p = p/p.sum()
 
-            #     Sample according to probability
-                rated_topics = np.random.choice(range(100), size=scores_per_r, replace=False, p=p)
+                # Generate all scores for optimal allocation
+                if optimal_allocation:
+                    rated_topics = np.array(range(100))
+                # Sample according to probability
+                else:
+                    rated_topics = np.random.choice(range(100), size=scores_per_r, replace=False, p=p)
                 rated_topics_idx = sim_topics[rated_topics]
                 counts[rated_topics] += 1
 
@@ -96,7 +105,7 @@ if __name__ == "__main__":
         #     Appending interaction to ds.
             ps_data = pd.concat([ps_data, sim_data], ignore_index=True)
 
-#         print(f"Completed simulating topic/rater interactions in {time() - startt:.2f}s")
+    #         print(f"Completed simulating topic/rater interactions in {time() - startt:.2f}s")
 
     #     Simulating Scores
         pymc_model = model["model"]
@@ -143,6 +152,53 @@ if __name__ == "__main__":
                   .rename(columns={"s":"intrusion"}))
             trial_sim_scores = pd.concat([sim_data.reset_index(drop=True)
                                          ,s["intrusion"]], axis="columns").astype(np.int16)
+
+            if optimal_allocation:
+                # Optimal topic allocation scores
+                scores = trial_sim_scores[:0]
+
+                if total_scores == None:
+                    total_scores = n_raters*scores_per_r
+
+                # Allocate topics for each rater
+                for sim_rater_id in range(n_raters):
+                    # Checking if all scores have been allocated
+                    if total_scores <= 0:
+                        break
+
+                    # Calculating variance for each topic's posterior distribution
+                    s = (scores.groupby("sim_topic_id").agg({"intrusion":"sum"})
+                         .rename(columns={"intrusion":"sum"}).reset_index())
+                    c = (scores.groupby("sim_topic_id").agg({"intrusion":"count"})
+                         .rename(columns={"intrusion":"count"}).reset_index())
+                    topic_var = pd.merge(s, c, on="sim_topic_id")
+
+                    # Create df with zeros if no data exists
+                    if len(topic_var) < 100:
+                        missing_topic_ids = [i for i in range(100) if i not in np.array(topic_var["sim_topic_id"])]
+                        missings = pd.DataFrame({"sim_topic_id":missing_topic_ids
+                                                  ,"sum":[0]*len(missing_topic_ids)
+                                                  ,"count":[0]*len(missing_topic_ids)})
+                        topic_var = pd.concat([topic_var, missings])
+
+                    # Calculating posterior variances
+                    topic_var["variance"] = postrr_var(topic_var["sum"], topic_var["count"])
+
+                    # Finding minimum priority value of second column
+                    cutoff = topic_var["variance"].max()/3**0.5
+
+                    # Allocating topics
+                    allocated_topics = (topic_var[topic_var["variance"]>=cutoff]
+                        .sort_values("variance", ascending=False))[:scores_per_r]["sim_topic_id"]
+                    total_scores -= len(allocated_topics)
+
+                    selected_scores = trial_sim_scores[(trial_sim_scores["sim_rater_id"]==sim_rater_id)&
+                                        (trial_sim_scores["sim_topic_id"].isin(allocated_topics))]
+
+                    scores = pd.concat([scores, selected_scores])
+
+                trial_sim_scores = scores
+
             sim_scores = pd.concat([sim_scores, trial_sim_scores], axis="index", ignore_index=True)
         return sim_scores
     
@@ -249,6 +305,7 @@ if __name__ == "__main__":
         "process=",
         "n_runs=",
         "trials_per_sim=",
+        "optimal_alloc=",
         "seed=",
         "sim_name=",
         "chain_method="])
@@ -257,6 +314,7 @@ if __name__ == "__main__":
     process_n=None
     n_runs=30
     trials_per_sim=1
+    optimal_allocation=False
     seed=42
     sim_name=None
     chain_method = "vectorized"
@@ -265,6 +323,7 @@ if __name__ == "__main__":
         if opt == "--process": process_n = int(value.strip())
         elif opt == "--n_runs": n_runs = int(value.strip())
         elif opt == "--trials_per_sim": trials_per_sim = int(value.strip())
+        elif opt == "--optimal_alloc": optimal_allocation = value.strip().lower() == "true"
         elif opt == "--seed": seed = int(value.strip())
         elif opt == "--sim_name": sim_name = value.strip()
         elif opt == "--chain_method": chain_method = value.strip()
@@ -273,6 +332,7 @@ if __name__ == "__main__":
     process={process_n}
     n_runs={n_runs}
     trials_per_sim={trials_per_sim}
+    optimal_alloc={optimal_allocation}
     seed={seed}
     sim_name={sim_name}
     chain_method={chain_method}
@@ -386,6 +446,7 @@ if __name__ == "__main__":
             inferred_glmm,
             p_diff=p_diff,
             n_raters=n_raters,
+            optimal_allocation=optimal_allocation,
             scores_per_r=scores_per_r,
             trials_per_sim=1,
             seed=run_seed
