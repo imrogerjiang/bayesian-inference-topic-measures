@@ -173,4 +173,4 @@ if __name__ == "__main__":
         
     # Create Header file
     with open(f"data/simulations/{sim_name}.csv", "w") as f:
-        f.write("sim_id,trial_id,p_diff,n_raters,cores_per_r,total_scores,propz_pval,bht_pval,seed\n")
+        f.write("sim_id,trial_id,p_diff,n_raters,scores_per_r,total_scores,propz_pval,bht_pval,seed\n")
