@@ -1,4 +1,4 @@
-sim_id,trial_id,p_diff,n_raters,cores_per_r,total_scores,propz_pval,bht_pval
+sim_id,trial_id,p_diff,n_raters,scores_per_r,total_scores,propz_pval,bht_pval
 0,0,0.055,47,35,1645,0.00030108065785717196,0.01641337386018237
 334,0,0.055,29,35,1015,0.02164138534598884,0.0916256157635468
 501,0,0.055,19,35,665,0.028123592628809604,0.12030075187969924
