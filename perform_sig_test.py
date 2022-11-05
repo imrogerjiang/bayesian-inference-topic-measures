@@ -19,7 +19,7 @@ from pymc.sampling_jax import sample_numpyro_nuts
 from time import time, sleep
 from datetime import timedelta
 
-# Usage python3 perform_sig_test.py --trials_per_sim 100 --n_runs 5 --optimal_alloc "True" --process 0 --sim_name "test"
+# Usage python3 perform_sig_test.py --trials_per_sim 1 --optimal_alloc "True" --n_runs 30 --process 0 --sim_name "test"
 
 if __name__ == "__main__":
     
@@ -67,24 +67,13 @@ if __name__ == "__main__":
             sim_topics_0 = resample(range(len(topic_cordel_ids)), param="za", size=50, bound=1)
             sim_topics_1 = resample(range(len(topic_cordel_ids)), param="za", size=50, bound=1)
             sim_topics = np.concatenate((sim_topics_0, sim_topics_1))
-
-            # Running total of scores
-            counts = np.zeros(100)
-
+            
+            # Loop - used to contain uniform sampling algorithm could use cleanup
+            # Produces df containing cross product between raters and topics
             for sim_rater_id, rater in enumerate(raters):
-            #     Set the probability. Topics with fewer samples have higher probability
-                counts = counts-counts.min()+1
-                p = 1/counts**20
-                p = p/p.sum()
+                rated_topics = np.array(range(100))
 
-                # Generate all scores for optimal allocation
-                if optimal_allocation:
-                    rated_topics = np.array(range(100))
-                # Sample according to probability
-                else:
-                    rated_topics = np.random.choice(range(100), size=scores_per_r, replace=False, p=p)
                 rated_topics_idx = sim_topics[rated_topics]
-                counts[rated_topics] += 1
 
             #     Append topics to simulation
                 d=topic_cordel_ids.loc[rated_topics_idx, ["topic_id", "cordel_id"]]
@@ -194,12 +183,27 @@ if __name__ == "__main__":
 
                     selected_scores = trial_sim_scores[(trial_sim_scores["sim_rater_id"]==sim_rater_id)&
                                         (trial_sim_scores["sim_topic_id"].isin(allocated_topics))]
-
                     scores = pd.concat([scores, selected_scores])
+            else:
+                # Running total of scores
+                counts = np.zeros(100)
+                scores = trial_sim_scores[:0]
+                for sim_rater_id, rater in enumerate(raters):
+                    # Set the probability. Topics with fewer samples have higher probability
+                    counts = counts-counts.min()+1
+                    p = 1/counts**20
+                    p = p/p.sum()
 
-                trial_sim_scores = scores
+                    # Sample according to probability
+                    allocated_topics = np.random.choice(range(100), size=scores_per_r, replace=False, p=p)
+                    counts[allocated_topics] += 1
 
-            sim_scores = pd.concat([sim_scores, trial_sim_scores], axis="index", ignore_index=True)
+                    selected_scores = trial_sim_scores[(trial_sim_scores["sim_rater_id"]==sim_rater_id)&
+                                    (trial_sim_scores["sim_topic_id"].isin(allocated_topics))]
+                    scores = pd.concat([scores, selected_scores])
+                    
+            sim_scores = pd.concat([sim_scores, scores], axis="index", ignore_index=True)
+            sim_scores.to_csv(f"data/{sim_name}/score_{sim_id}.csv", index=False)
         return sim_scores
     
         
