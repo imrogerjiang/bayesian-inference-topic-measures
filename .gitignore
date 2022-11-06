@@ -3,6 +3,10 @@ data/sig_n_raters/*
 data/test/*
 data/simulations/test.csv
 bayesian_model
+data/*/*.pickle
+data/*/sim_settings_*
+data/*/process_*.pickle
+data/*/score_*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
