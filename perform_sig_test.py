@@ -298,8 +298,9 @@ if __name__ == "__main__":
                 glm["trace"]=pm.sample(chains=n_chains, random_seed=np.random.randint(2**20))
 
         n_negatives = (glm["trace"].posterior["c_diff"].sel({"obs_id":1, "c_diff_dim_1":0}) < 0).sum().item()
+        total = glm["trace"].posterior["c_diff"].sel({"obs_id":1, "c_diff_dim_1":0}).count().item()
 
-        return  n_negatives/len(sample)
+        return  n_negatives/total
 
 
 
