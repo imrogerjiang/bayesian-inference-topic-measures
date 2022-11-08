@@ -1,0 +1,3 @@
+Bayesian hypothesis test P values in this folder are NOT CORRECT.
+Specifically the divisor in their calculation was total_scores instead of len(trace).
+This folder is just a backup for when I recalculate the scores in the simulations folder. 
