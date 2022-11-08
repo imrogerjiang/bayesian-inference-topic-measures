@@ -231,10 +231,15 @@ if __name__ == "__main__":
         # sample = scores[scores["trial_id"]==0]
         if seed != None:
             np.random.seed(seed)
-
-    # Bayesian hypothesis tests whether the two distributions in the sample are statisticaly significant
-    # Setting up numpy arrays for pymc
-    # Only 2 models and 1 corpus in simulation
+            
+        # pval incorrect when sim_topic_id  is between (0, 100).
+        # Error is due to c_mean adding all 100 "topics" for each cordel even 50 invalid ones
+        # Corrects sim_topics of cordel 1 to 0-50
+        sample.loc[sample["sim_cordel_id"]==1, "sim_topic_id"]-=50
+    
+        # Bayesian hypothesis tests whether the two distributions in the sample are statisticaly significant
+        # Setting up numpy arrays for pymc
+        # Only 2 models and 1 corpus in simulation
         corpus_array = np.array([0]*len(sample))
         n_corpora = 1
 
@@ -287,18 +292,18 @@ if __name__ == "__main__":
                     observed=score_array, 
                     dims="obs_id")
 
-            c_mean = pm.Deterministic("c_mean", 
-                                      pm.math.invlogit(mu + (za.T*sigma_a)).mean(axis=0), 
-                                      dims="obs_id")
-            c_diff = pm.Deterministic("c_diff", c_mean.reshape([n_cordels,1]) - c_mean.reshape([1,n_cordels]), dims="obs_id")
+            c_mean0 = pm.Deterministic("c_mean0", mu[0] + za[0,:].mean()*sigma_a)
+            c_mean1 = pm.Deterministic("c_mean1", mu[1] + za[1,:].mean()*sigma_a)
+            c_diff = pm.Deterministic("c_diff", c_mean1 - c_mean0)
 
             if SAMPLE_JAX:
                 glm["trace"]=sample_numpyro_nuts(chains=1, random_seed=np.random.randint(2**20), chain_method=chain_method)
             else:
                 glm["trace"]=pm.sample(chains=n_chains, random_seed=np.random.randint(2**20))
 
-        n_negatives = (glm["trace"].posterior["c_diff"].sel({"obs_id":1, "c_diff_dim_1":0}) < 0).sum().item()
-        total = glm["trace"].posterior["c_diff"].sel({"obs_id":1, "c_diff_dim_1":0}).count().item()
+        
+        n_negatives = (glm["trace"].posterior["c_diff"]<0).sum().item()
+        total = glm["trace"].posterior["c_diff"].count().item()
 
         return  n_negatives/total
 
@@ -358,10 +363,6 @@ if __name__ == "__main__":
 
     # Time
     start_time = time()
-
-    # GPU setting
-    SAMPLE_JAX = True
-    N_PROCESSES = 6
 
     # Reading in data
     raw_data = pd.read_csv("data/unit_level_ratings.csv",index_col = 0)
