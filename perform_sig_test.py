@@ -292,9 +292,11 @@ if __name__ == "__main__":
                     observed=score_array, 
                     dims="obs_id")
 
-            c_mean0 = pm.Deterministic("c_mean0", mu[0] + za[0,:].mean()*sigma_a)
-            c_mean1 = pm.Deterministic("c_mean1", mu[1] + za[1,:].mean()*sigma_a)
-            c_diff = pm.Deterministic("c_diff", c_mean1 - c_mean0)
+            c_mean = pm.Deterministic("c_mean", 
+                                      pm.math.invlogit(mu + (za.T*sigma_a)).mean(axis=0), 
+                                      dims="obs_id")
+            c_diff = pm.Deterministic("c_diff", c_mean[1]- c_mean[0])
+
 
             if SAMPLE_JAX:
                 glm["trace"]=sample_numpyro_nuts(chains=1, random_seed=np.random.randint(2**20), chain_method=chain_method)
