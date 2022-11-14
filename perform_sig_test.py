@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 # import seaborn as sns
 from scipy.special import logit, expit
-from scipy.stats import uniform, norm, bernoulli
+from scipy.stats import uniform, norm, bernoulli, betabinom
 from statsmodels.stats.proportion import proportions_ztest
 # from matplotlib import pyplot as plt
 import pymc as pm
@@ -47,6 +47,11 @@ if __name__ == "__main__":
             a = n_success+1
             b = total-n_success+1
             return a*b/((a+b+1)*(a+b)**2)
+        
+        def postrr_p(n_success, total):
+            a = n_success+1
+            b = total-n_success+1
+            return betabinom.pmf(n=1,k=1,a=a,b=b)
 
         # Setting numpy seed
         np.random.seed(seed)
@@ -170,16 +175,17 @@ if __name__ == "__main__":
                                                   ,"count":[0]*len(missing_topic_ids)})
                         topic_var = pd.concat([topic_var, missings])
 
-                    # Calculating posterior variances
+                    # Calculating reduction in variance
                     topic_var["variance"] = postrr_var(topic_var["sum"], topic_var["count"])
-
-                    # Finding minimum priority value of second column
-                    cutoff = topic_var["variance"].max()/3**0.5
+                    topic_var["p"] = postrr_p(topic_var["sum"], topic_var["count"])
+                    topic_var["var0"] = postrr_var(topic_var["sum"], topic_var["count"]+1)
+                    topic_var["var1"] = postrr_var(topic_var["sum"]+1, topic_var["count"]+1)
+                    topic_var["expected_var"] = topic_var["p"]*topic_var["var1"]+(1-topic_var["p"])*topic_var["var0"]
+                    topic_var["var_diff"] = topic_var["expected_var"]-topic_var["variance"]
 
                     # Allocating topics
-                    allocated_topics = (topic_var[topic_var["variance"]>=cutoff]
-                        .sort_values("variance", ascending=False))[:scores_per_r]["sim_topic_id"]
-                    total_scores -= len(allocated_topics)
+                    allocated_topics = topic_var.sort_values("var_diff", ascending=True)[:scores_per_r]["sim_topic_id"]
+                    total_scores -= scores_per_r
 
                     selected_scores = trial_sim_scores[(trial_sim_scores["sim_rater_id"]==sim_rater_id)&
                                         (trial_sim_scores["sim_topic_id"].isin(allocated_topics))]
