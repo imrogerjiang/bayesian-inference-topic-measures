@@ -165,26 +165,24 @@ if __name__ == "__main__":
                          .rename(columns={"intrusion":"sum"}).reset_index())
                     c = (scores.groupby("sim_topic_id").agg({"intrusion":"count"})
                          .rename(columns={"intrusion":"count"}).reset_index())
-                    topic_var = pd.merge(s, c, on="sim_topic_id")
+                    topic_sd = pd.merge(s, c, on="sim_topic_id")
 
                     # Create df with zeros if no data exists
-                    if len(topic_var) < 100:
-                        missing_topic_ids = [i for i in range(100) if i not in np.array(topic_var["sim_topic_id"])]
+                    if len(topic_sd) < 100:
+                        missing_topic_ids = [i for i in range(100) if i not in np.array(topic_sd["sim_topic_id"])]
                         missings = pd.DataFrame({"sim_topic_id":missing_topic_ids
                                                   ,"sum":[0]*len(missing_topic_ids)
                                                   ,"count":[0]*len(missing_topic_ids)})
-                        topic_var = pd.concat([topic_var, missings])
+                        topic_sd = pd.concat([topic_sd, missings])
 
-                    # Calculating reduction in variance
-                    topic_var["variance"] = postrr_var(topic_var["sum"], topic_var["count"])
-                    topic_var["p"] = postrr_p(topic_var["sum"], topic_var["count"])
-                    topic_var["var0"] = postrr_var(topic_var["sum"], topic_var["count"]+1)
-                    topic_var["var1"] = postrr_var(topic_var["sum"]+1, topic_var["count"]+1)
-                    topic_var["expected_var"] = topic_var["p"]*topic_var["var1"]+(1-topic_var["p"])*topic_var["var0"]
-                    topic_var["var_diff"] = topic_var["expected_var"]-topic_var["variance"]
+                    # Calculating variance
+                    topic_sd["sd"] = postrr_var(topic_sd["sum"], topic_sd["count"])**0.5
+
+                    # Calculation priority values (wright_equivalence_2012)
+                    topic_sd["priority_value"] = topic_sd["sd"]/(topic_sd["count"] * (topic_sd["count"]+1))**0.5
 
                     # Allocating topics
-                    allocated_topics = topic_var.sort_values("var_diff", ascending=True)[:scores_per_r]["sim_topic_id"]
+                    allocated_topics = topic_sd.sort_values("priority_value", ascending=False)[:scores_per_r]["sim_topic_id"]
                     total_scores -= scores_per_r
 
                     selected_scores = trial_sim_scores[(trial_sim_scores["sim_rater_id"]==sim_rater_id)&
