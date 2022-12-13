@@ -7,6 +7,9 @@ data/*/*.pickle
 data/*/sim_settings_*
 data/*/process_*.pickle
 data/*/score_*
+data/power*
+data/*/sim_settings.csv
+data/*/process_*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
