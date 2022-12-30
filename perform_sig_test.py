@@ -48,6 +48,11 @@ if __name__ == "__main__":
             b = total-n_success+1
             return a*b/((a+b+1)*(a+b)**2)
         
+        def pop_var_estimator(n_success, total):
+            a = n_success+1
+            b = total-n_success+1
+            return a*b/(a+b)
+        
         def postrr_p(n_success, total):
             a = n_success+1
             b = total-n_success+1
@@ -176,7 +181,7 @@ if __name__ == "__main__":
                         topic_sd = pd.concat([topic_sd, missings])
 
                     # Calculating variance
-                    topic_sd["sd"] = postrr_var(topic_sd["sum"], topic_sd["count"])**0.5
+                    topic_sd["sd"] = pop_var_estimator(topic_sd["sum"], topic_sd["count"])**0.5
 
                     # Calculation priority values (wright_equivalence_2012)
                     topic_sd["priority_value"] = topic_sd["sd"]/(topic_sd["count"] * (topic_sd["count"]+1))**0.5
