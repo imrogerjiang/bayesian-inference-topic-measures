@@ -180,7 +180,7 @@ if __name__ == "__main__":
                                                   ,"count":[0]*len(missing_topic_ids)})
                         topic_sd = pd.concat([topic_sd, missings])
 
-                    # Calculating variance
+                    # Calculating standard deviation
                     topic_sd["sd"] = pop_var_estimator(topic_sd["sum"], topic_sd["count"])**0.5
 
                     # Calculation priority values (wright_equivalence_2012)
