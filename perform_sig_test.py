@@ -19,13 +19,13 @@ from pymc.sampling_jax import sample_numpyro_nuts
 from time import time, sleep
 from datetime import timedelta
 
-# Usage python3 perform_sig_test.py --trials_per_sim 1 --optimal_alloc "True" --n_runs 30 --process 0 --sim_name "test"
+# Usage python3 perform_sig_test.py --trials_per_sim 1 --allocation "True" --n_runs 30 --process 0 --sim_name "test"
 
 if __name__ == "__main__":
     
         # Simulate scores
     def simulate_scores(model, p_diff=0.08, n_raters=40, scores_per_r=40, total_scores=None, 
-                        trials_per_sim=1_000, seed=42, optimal_allocation=False):
+                        trials_per_sim=1_000, seed=42, allocation=None):
 
         def resample(all_ids, param, size, bound=0.1):
             # resampling raters and topics such that effects sum to 0.
@@ -152,7 +152,7 @@ if __name__ == "__main__":
             trial_sim_scores = pd.concat([sim_data.reset_index(drop=True)
                                          ,s["intrusion"]], axis="columns").astype(np.int16)
 
-            if optimal_allocation:
+            if allocation=="optimial":
                 # Optimal topic allocation scores
                 scores = trial_sim_scores[:0]
 
@@ -192,6 +192,14 @@ if __name__ == "__main__":
 
                     selected_scores = trial_sim_scores[(trial_sim_scores["sim_rater_id"]==sim_rater_id)&
                                         (trial_sim_scores["sim_topic_id"].isin(allocated_topics))]
+                    scores = pd.concat([scores, selected_scores])
+            elif allocation == "random":
+                # Random allocation, unequal distribution of scores over topics                
+                scores = trial_sim_scores[:0]
+                for sim_rater_id, rater in enumerate(raters):
+                    allocated_topics = np.random.choice(range(100), size=scores_per_r, replace=False)
+                    selected_scores = trial_sim_scores[(trial_sim_scores["sim_rater_id"]==sim_rater_id)&
+                                    (trial_sim_scores["sim_topic_id"].isin(allocated_topics))]
                     scores = pd.concat([scores, selected_scores])
             else:
                 # Running total of scores
@@ -326,7 +334,7 @@ if __name__ == "__main__":
         "process=",
         "n_runs=",
         "trials_per_sim=",
-        "optimal_alloc=",
+        "allocation=",
         "seed=",
         "sim_name=",
         "chain_method="])
@@ -335,7 +343,7 @@ if __name__ == "__main__":
     process_n=None
     n_runs=30
     trials_per_sim=1
-    optimal_allocation=False
+    allocation=None
     seed=42
     sim_name=None
     chain_method = "vectorized"
@@ -344,7 +352,7 @@ if __name__ == "__main__":
         if opt == "--process": process_n = int(value.strip())
         elif opt == "--n_runs": n_runs = int(value.strip())
         elif opt == "--trials_per_sim": trials_per_sim = int(value.strip())
-        elif opt == "--optimal_alloc": optimal_allocation = value.strip().lower() == "true"
+        elif opt == "--allocation": allocation = value.strip().lower()
         elif opt == "--seed": seed = int(value.strip())
         elif opt == "--sim_name": sim_name = value.strip()
         elif opt == "--chain_method": chain_method = value.strip()
@@ -353,7 +361,7 @@ if __name__ == "__main__":
     process={process_n}
     n_runs={n_runs}
     trials_per_sim={trials_per_sim}
-    optimal_alloc={optimal_allocation}
+    allocation={allocation}
     seed={seed}
     sim_name={sim_name}
     chain_method={chain_method}
@@ -463,7 +471,7 @@ if __name__ == "__main__":
             inferred_glmm,
             p_diff=p_diff,
             n_raters=n_raters,
-            optimal_allocation=optimal_allocation,
+            allocation=allocation,
             scores_per_r=scores_per_r,
             trials_per_sim=1,
             seed=run_seed
