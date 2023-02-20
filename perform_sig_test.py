@@ -220,7 +220,7 @@ if __name__ == "__main__":
                     scores = pd.concat([scores, selected_scores])
                     
             sim_scores = pd.concat([sim_scores, scores], axis="index", ignore_index=True)
-            sim_scores.to_csv(f"data/{sim_name}/score_{sim_id}.csv", index=False)
+            sim_scores.to_csv(f"data/{sim_name}/score_{sim_id}_{trial_id}.csv", index=False)
         return sim_scores
     
         
