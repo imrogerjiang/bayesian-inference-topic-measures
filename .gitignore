@@ -10,6 +10,7 @@ data/*/score_*
 data/power*
 data/*/sim_settings.csv
 data/*/process_*
+!data/rand/*.csv
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
