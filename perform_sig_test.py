@@ -47,12 +47,12 @@ if __name__ == "__main__":
             a = n_success+1
             b = total-n_success+1
             return a*b/((a+b+1)*(a+b)**2)
-        
+
         def pop_var_estimator(n_success, total):
             a = n_success+1
             b = total-n_success+1
             return a*b/(a+b)
-        
+
         def postrr_p(n_success, total):
             a = n_success+1
             b = total-n_success+1
@@ -64,6 +64,54 @@ if __name__ == "__main__":
         # Creating df schema
         ps_data = pd.DataFrame(columns=["trial_id", "sim_cordel_id", "sim_topic_id", "sim_rater_id", 
                                         "cordel_id", "topic_id", "rater_id"], dtype=np.int16)
+
+        if allocation == "hoyle":
+            n_topics = 50 #hard coded
+            prob_correct = np.array([
+                1/6, # how often someone selects the intruder for an incoherent topic
+                0.85, # how often someone selects the intruder for a coherent topic. estimated from chang 2009: avg. % correct of the 10% most-correct topics
+            ])
+
+            # Translating difference in probability to difference in number of topics
+            p_to_topic = {0.04:3, 0.055:4, 0.07:5}
+            bad_topic_diff = p_to_topic[p_diff]
+
+            sim_scores=pd.DataFrame()
+            for trial_id in range(trials_per_sim):
+                model_a_topics = np.random.choice([0, 1], n_topics)
+                while model_a_topics.sum() < bad_topic_diff:
+                    model_a_topics = np.random.choice([0, 1], n_topics)
+                model_b_topics = np.zeros(n_topics, dtype=int)
+                model_b_topics[:int(model_a_topics.sum() - bad_topic_diff)] = 1
+
+                # simulate responses
+                topic_assignments = n_raters
+                prob_a = prob_correct[model_a_topics]
+                model_a_responses = np.random.binomial(n=topic_assignments, p=prob_a)
+                prob_b = prob_correct[model_b_topics]
+                model_b_responses = np.random.binomial(n=topic_assignments, p=prob_b)
+
+                temp_scores = pd.DataFrame()
+                for j, t_coherence in enumerate(model_a_topics):
+                    p = prob_correct[t_coherence]
+                    intrusion = bernoulli.rvs(p, size=topic_assignments)
+                    topic_scores = pd.DataFrame(
+                        np.array([[trial_id]*topic_assignments, [1]*topic_assignments, [j]*topic_assignments,
+                                 [k for k in range(topic_assignments)], intrusion]).T,
+                        columns=["trial_id", "sim_cordel_id", "sim_topic_id", "sim_rater_id", "intrusion"])
+                    temp_scores = pd.concat([temp_scores, topic_scores])
+
+                for j, t_coherence in enumerate(model_b_topics):
+                    p = prob_correct[t_coherence]
+                    intrusion = bernoulli.rvs(p, size=topic_assignments)
+                    topic_scores = pd.DataFrame(
+                        np.array([[trial_id]*topic_assignments, [0]*topic_assignments, [j]*topic_assignments,
+                                 [k for k in range(topic_assignments)], intrusion]).T,
+                        columns=["trial_id", "sim_cordel_id", "sim_topic_id", "sim_rater_id", "intrusion"])
+                    temp_scores = pd.concat([temp_scores, topic_scores])
+
+                sim_scores = pd.concat([sim_scores, temp_scores])
+            return sim_scores
 
         for trial_id in range(trials_per_sim):
 
@@ -77,7 +125,7 @@ if __name__ == "__main__":
             sim_topics_0 = resample(range(len(topic_cordel_ids)), param="za", size=50, bound=1)
             sim_topics_1 = resample(range(len(topic_cordel_ids)), param="za", size=50, bound=1)
             sim_topics = np.concatenate((sim_topics_0, sim_topics_1))
-            
+
             # Loop - used to contain uniform sampling algorithm could use cleanup
             # Produces df containing cross product between raters and topics
             for sim_rater_id, rater in enumerate(raters):
@@ -218,7 +266,7 @@ if __name__ == "__main__":
                     selected_scores = trial_sim_scores[(trial_sim_scores["sim_rater_id"]==sim_rater_id)&
                                     (trial_sim_scores["sim_topic_id"].isin(allocated_topics))]
                     scores = pd.concat([scores, selected_scores])
-                    
+
             sim_scores = pd.concat([sim_scores, scores], axis="index", ignore_index=True)
         return sim_scores
     
@@ -243,7 +291,7 @@ if __name__ == "__main__":
         return p_val
 
     # Applies bayesian hypothesis test to find p value that model1 > model0
-    def bht_pval(sample, n_chains, seed=None):
+    def bht_pval(sample, allocation, n_chains, seed=None):
         # sample = scores[scores["trial_id"]==0]
         if seed != None:
             np.random.seed(seed)
@@ -251,7 +299,8 @@ if __name__ == "__main__":
         # pval incorrect when sim_topic_id  is between (0, 100).
         # Error is due to c_mean adding all 100 "topics" for each cordel even 50 invalid ones
         # Corrects sim_topics of cordel 1 to 0-50
-        sample.loc[sample["sim_cordel_id"]==1, "sim_topic_id"]-=50
+        if allocation != "hoyle":
+            sample.loc[sample["sim_cordel_id"]==1, "sim_topic_id"]-=50
     
         # Bayesian hypothesis tests whether the two distributions in the sample are statisticaly significant
         # Setting up numpy arrays for pymc
@@ -292,21 +341,32 @@ if __name__ == "__main__":
             raters = pm.Data("raters", rater_array, mutable=True, dims="obs_id")
             topics = pm.Data("topics", topic_array, mutable=True, dims=["cordel", "topic"])
             cordels = pm.Data("cordels", cordel_array, mutable=True, dims="obs_id")
-
-            sigma_r = pm.Exponential("sigma_r", lam=r_lambda)
-            zr = pm.Normal("zr",mu=0, sigma=1, shape=n_raters)
+            
+            # Hoyle's simulation does not have any raters. Remove rater variable from test.
+            if allocation != "hoyle":
+                sigma_r = pm.Exponential("sigma_r", lam=r_lambda)
+                zr = pm.Normal("zr",mu=0, sigma=1, shape=n_raters)
             sigma_a = pm.Exponential("sigma_a", lam=t_lambda)
             za = pm.Normal("za",mu=0, sigma=t_sigma, shape=(n_cordels, n_topics)) 
             mu = pm.Normal("mu",mu=empirical_mean, sigma=mu_sigma, shape=n_cordels)
-
-            s = pm.Bernoulli(
-                    "s", 
-                    p=pm.math.invlogit(
-                        mu[cordels]+
-                        za[topics[0],topics[1]]*sigma_a+
-                        zr[raters]*sigma_r),
-                    observed=score_array, 
-                    dims="obs_id")
+            
+            if allocation=="hoyle":
+                s = pm.Bernoulli(
+                        "s", 
+                        p=pm.math.invlogit(
+                            mu[cordels]+
+                            za[topics[0],topics[1]]*sigma_a),
+                        observed=score_array, 
+                        dims="obs_id")
+            else:
+                s = pm.Bernoulli(
+                        "s", 
+                        p=pm.math.invlogit(
+                            mu[cordels]+
+                            za[topics[0],topics[1]]*sigma_a+
+                            zr[raters]*sigma_r),
+                        observed=score_array, 
+                        dims="obs_id")
 
             c_mean = pm.Deterministic("c_mean", 
                                       pm.math.invlogit(mu + (za.T*sigma_a)).mean(axis=0), 
@@ -479,7 +539,7 @@ if __name__ == "__main__":
 
         sim_results = pd.DataFrame(
             [[sim_id, trial_id, p_diff, n_raters, scores_per_r, total_scores, 
-             propz_pval(scores), bht_pval(scores, n_chains=1, seed=run_seed), run_seed]],
+             propz_pval(scores), bht_pval(scores, allocation, n_chains=1, seed=run_seed), run_seed]],
             columns=["sim_id", "trial_id", "p_diff", "n_raters",  "scores_per_r", "total_scores", 
                      "propz_pval", "bht_pval", "seed"])
 
